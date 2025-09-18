@@ -15,8 +15,12 @@ import { getSender, getSenderFull } from "../../config/ChatLogics";
 import ProfileModal from "./miscellaneous/ProfileModal";
 import UpdateGroupChatModal from "./miscellaneous/UpdateGroupChatModal";
 import axios from "axios";
-import './styles.css'
+import "./styles.css";
 import ScrollableChat from "./ScrollableChat";
+import io from "socket.io-client";
+
+const ENDPOINT = "http://localhost:8000";
+let socket, selectedChatCompare;
 
 function SingleChat({ fetchAgain, setFetchAgain }) {
   const { user, selectedChat, setSelectedChat } = ChatState();
@@ -28,13 +32,14 @@ function SingleChat({ fetchAgain, setFetchAgain }) {
 
   const [newMessage, setNewMessage] = useState();
 
+  const [socketConnected, setSocketConnected] = useState(false);
+
   const toast = useToast();
 
   const fetchMessages = async () => {
     if (!selectedChat) return;
 
     try {
-      
       const config = {
         headers: {
           Authorization: `Bearer ${user.token}`,
@@ -43,12 +48,14 @@ function SingleChat({ fetchAgain, setFetchAgain }) {
 
       setLoading(true);
 
-      const {data}=await axios.get(`/api/message/${selectedChat._id}`,config);
-     console.log(data);
+      const { data } = await axios.get(
+        `/api/message/${selectedChat._id}`,
+        config
+      );
+      console.log(data);
       setMessages(data);
-      
+     socket.emit('join chat',selectedChat._id);
       setLoading(false);
-
     } catch (error) {
       toast({
         title: "Error Occured!",
@@ -60,6 +67,10 @@ function SingleChat({ fetchAgain, setFetchAgain }) {
       });
     }
   };
+
+  useEffect(() => {
+    fetchMessages();
+  }, [selectedChat]);
 
   const sendMessage = async (e) => {
     if (e.key === "Enter" && newMessage) {
@@ -97,14 +108,18 @@ function SingleChat({ fetchAgain, setFetchAgain }) {
     }
   };
 
+  useEffect(() => {
+    socket = io(ENDPOINT);
+    socket.emit("setup", user);
+    socket.on("connection", () => {
+      setSocketConnected(true);
+    });
+  }, []);
+
   const typingHandler = (e) => {
     setNewMessage(e.target.value);
     //Typing Indicator Logic
   };
-
-  useEffect(()=>{
-    fetchMessages();
-  },[selectedChat])
 
   return (
     <>
@@ -161,7 +176,10 @@ function SingleChat({ fetchAgain, setFetchAgain }) {
                 margin={"auto"}
               />
             ) : (
-              <div className="messages"> <ScrollableChat messages={messages}/></div>
+              <div className="messages">
+                {" "}
+                <ScrollableChat messages={messages} />
+              </div>
             )}
             <FormControl onKeyDown={sendMessage} isRequired mt={3}>
               <Input
